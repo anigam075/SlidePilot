@@ -17,6 +17,10 @@
           <h2 id="slideTitle">Slide 1</h2>
           <span id="slideCounter"></span>
         </div>
+        <div class="voice-indicator" id="voiceIndicator">
+          <span class="voice-dot"></span>
+          <span id="voiceIndicatorText">Wake word idle</span>
+        </div>
         <div id="status" class="status">Loading prepared presentation...</div>
         <div class="presentation-grid">
           <div class="media-pane" id="mediaPane">
@@ -29,6 +33,7 @@
               <button id="homeBtn" type="button">Home</button>
               <button id="narrateBtn">Start Presentation</button>
               <button id="fullscreenBtn" type="button">Enter Fullscreen</button>
+              <button id="voiceBtn" type="button">Voice: Off</button>
             </div>
 
             <p id="scriptBox" class="script-box"></p>
@@ -44,6 +49,7 @@
       </section>
     </main>
 
+    <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
     <script src="/static/player.js"></script>
   </body>
 </html>

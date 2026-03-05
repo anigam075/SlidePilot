@@ -8,10 +8,13 @@ const answerBox = document.getElementById("answerBox");
 const qnaSection = document.getElementById("qnaSection");
 const statusBox = document.getElementById("status");
 const mediaPane = document.getElementById("mediaPane");
+const voiceIndicator = document.getElementById("voiceIndicator");
+const voiceIndicatorText = document.getElementById("voiceIndicatorText");
 
 const narrateBtn = document.getElementById("narrateBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 const homeBtn = document.getElementById("homeBtn");
+const voiceBtn = document.getElementById("voiceBtn");
 const askBtn = document.getElementById("askBtn");
 const questionInput = document.getElementById("questionInput");
 const audioPlayer = new Audio();
@@ -23,6 +26,9 @@ let currentSlideIndex = 0;
 let autoPresentationRunning = false;
 let isPaused = false;
 let hasCompletedPresentation = false;
+let recognizer = null;
+let voiceEnabled = false;
+let wakeIndicatorTimeout = null;
 
 function setStatus(message, isError = false) {
   statusBox.textContent = message;
@@ -66,6 +72,144 @@ function updateFullscreenButton() {
   fullscreenBtn.textContent = document.fullscreenElement
     ? "Exit Fullscreen"
     : "Enter Fullscreen";
+}
+
+function setVoiceButton() {
+  voiceBtn.textContent = voiceEnabled ? "Voice: On" : "Voice: Off";
+  voiceIndicatorText.textContent = voiceEnabled ? "Listening for 'Slide pilot'" : "Wake word idle";
+  voiceIndicator.classList.toggle("enabled", voiceEnabled);
+}
+
+async function fetchSpeechToken() {
+  const response = await fetch("/api/speech/token");
+  if (!response.ok) {
+    throw new Error("Unable to fetch speech token.");
+  }
+  return response.json();
+}
+
+function normalizeVoiceText(text) {
+  return text.toLowerCase().replace(/[.?!]/g, "").trim();
+}
+
+async function pushVoiceDebugToServer(text) {
+  try {
+    await fetch("/api/voice/debug", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+  } catch {
+    // Debug forwarding is best-effort only.
+  }
+}
+
+async function handleVoiceCommand(rawText) {
+  const normalized = normalizeVoiceText(rawText);
+  const wakeMatch = normalized.match(/^slide[\s,.]*pilot[,\s:-]*(.*)$/);
+  if (!wakeMatch) {
+    return;
+  }
+  if (wakeIndicatorTimeout) {
+    clearTimeout(wakeIndicatorTimeout);
+  }
+  voiceIndicator.classList.add("wake-hit");
+  voiceIndicatorText.textContent = "Wake word detected";
+  wakeIndicatorTimeout = setTimeout(() => {
+    voiceIndicator.classList.remove("wake-hit");
+    voiceIndicatorText.textContent = voiceEnabled ? "Listening for 'Slide pilot'" : "Wake word idle";
+  }, 5000);
+
+  const command = (wakeMatch[1] || "").trim();
+  if (!command) return;
+
+  if (command.includes("go to home") || command === "home") {
+    homeBtn.click();
+    return;
+  }
+  if (command.includes("start presentation")) {
+    narrateBtn.click();
+    return;
+  }
+  if (command.includes("replay presentation")) {
+    hasCompletedPresentation = true;
+    narrateBtn.click();
+    return;
+  }
+  if (command.includes("enter fullscreen") || command.includes("enter full screen")) {
+    if (!document.fullscreenElement) {
+      fullscreenBtn.click();
+    }
+    return;
+  }
+  if (command.includes("exit fullscreen") || command.includes("exit full screen")) {
+    if (document.fullscreenElement) {
+      fullscreenBtn.click();
+    }
+    return;
+  }
+  if (command === "pause" || command.includes("pause")) {
+    if (autoPresentationRunning && !isPaused) {
+      narrateBtn.click();
+    }
+    return;
+  }
+  if (command === "resume" || command === "play" || command.includes("resume")) {
+    if (autoPresentationRunning && isPaused) {
+      narrateBtn.click();
+    }
+    return;
+  }
+
+  // Unmatched command after wake phrase is treated as a QnA question.
+  if (qnaSection.classList.contains("hidden")) {
+    setStatus("Voice question received. QnA opens after presentation finishes.", true);
+    return;
+  }
+  questionInput.value = wakeMatch[1].trim();
+  askBtn.click();
+}
+
+async function startVoiceRecognition() {
+  const sdk = window.SpeechSDK;
+  if (!sdk) {
+    throw new Error("Azure Speech SDK not loaded in browser.");
+  }
+  const { token, region } = await fetchSpeechToken();
+  const speechConfig = sdk.SpeechConfig.fromAuthorizationToken(token, region);
+  speechConfig.speechRecognitionLanguage = "en-US";
+  const audioConfig = sdk.AudioConfig.fromDefaultMicrophoneInput();
+  recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
+
+  recognizer.recognized = async (_sender, event) => {
+    if (event.result.reason !== sdk.ResultReason.RecognizedSpeech) return;
+    const recognizedText = (event.result.text || "").trim();
+    if (!recognizedText) return;
+    await pushVoiceDebugToServer(recognizedText);
+    await handleVoiceCommand(recognizedText);
+  };
+  recognizer.canceled = () => {
+    setStatus("Voice recognition canceled.", true);
+  };
+
+  await new Promise((resolve, reject) => {
+    recognizer.startContinuousRecognitionAsync(resolve, reject);
+  });
+  voiceEnabled = true;
+  setVoiceButton();
+  setStatus("Voice control is active. Start commands with 'Slide pilot ...'.");
+}
+
+async function stopVoiceRecognition() {
+  if (!recognizer) return;
+  await new Promise((resolve, reject) => {
+    recognizer.stopContinuousRecognitionAsync(resolve, reject);
+  });
+  recognizer.close();
+  recognizer = null;
+  voiceEnabled = false;
+  setVoiceButton();
+  setStatus("Voice control stopped.");
 }
 
 function waitForAudioToEnd() {
@@ -237,6 +381,20 @@ homeBtn.addEventListener("click", () => {
   window.location.href = "/";
 });
 
+voiceBtn.addEventListener("click", async () => {
+  try {
+    if (voiceEnabled) {
+      await stopVoiceRecognition();
+    } else {
+      await startVoiceRecognition();
+    }
+  } catch (error) {
+    voiceEnabled = false;
+    setVoiceButton();
+    setStatus(error.message || "Unable to toggle voice recognition.", true);
+  }
+});
+
 askBtn.addEventListener("click", async () => {
   const question = questionInput.value.trim();
   if (!deck) return;
@@ -277,4 +435,5 @@ askBtn.addEventListener("click", async () => {
 });
 
 updateFullscreenButton();
+setVoiceButton();
 loadDeck();

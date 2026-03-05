@@ -3,8 +3,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 import re
+import logging
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+import httpx
+from fastapi import Body, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +41,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 storage = StorageService(settings.storage_root)
 llm_service = LLMService()
 speech_service = SpeechService()
+logger = logging.getLogger("slidepilot.voice")
 CLOSING_STATEMENT = (
     "If you have any question, feel free to drop your query in the QnA section. "
     "I will be happy to answer."
@@ -257,3 +260,28 @@ async def get_image(deck_id: str, filename: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(path)
+
+
+@app.get("/api/speech/token")
+async def get_speech_token():
+    url = f"https://{settings.azure_speech_region}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
+    headers = {"Ocp-Apim-Subscription-Key": settings.azure_speech_key}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(url, headers=headers)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Unable to connect to Azure Speech token service") from exc
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Failed to fetch Azure Speech token")
+
+    return {"token": response.text, "region": settings.azure_speech_region}
+
+
+@app.post("/api/voice/debug")
+async def voice_debug(payload: dict = Body(...)):
+    text = str(payload.get("text", "")).strip()
+    if text:
+        print(f"[SlidePilot Voice Debug] {text}", flush=True)
+        logger.info("Voice recognized: %s", text)
+    return {"ok": True}

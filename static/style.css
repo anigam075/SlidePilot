@@ -203,11 +203,60 @@ button:disabled {
   box-shadow: 0 10px 22px rgba(68, 90, 112, 0.25);
 }
 
+#voiceBtn {
+  background: linear-gradient(135deg, #ff7a59, #ff3d81);
+  box-shadow: 0 10px 22px rgba(236, 85, 136, 0.28);
+}
+
 .status {
   margin-top: 12px;
   min-height: 24px;
   color: #2f5976;
   font-weight: 700;
+}
+
+.voice-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(90, 114, 137, 0.28);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.75);
+  color: #4e6478;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.voice-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8fa2b6;
+}
+
+.voice-indicator.enabled .voice-dot {
+  background: #2aa8ff;
+}
+
+.voice-indicator.wake-hit {
+  border-color: rgba(255, 61, 129, 0.4);
+  color: #8f2456;
+  background: rgba(255, 233, 242, 0.9);
+}
+
+.voice-indicator.wake-hit .voice-dot {
+  background: #ff3d81;
+  animation: wake-pulse 0.9s ease-out 2;
+}
+
+@keyframes wake-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 61, 129, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(255, 61, 129, 0);
+  }
 }
 
 .hidden {
@@ -224,7 +273,7 @@ button:disabled {
 
 .presentation-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.95fr) minmax(280px, 0.75fr);
+  grid-template-columns: minmax(0, 1.85fr) minmax(360px, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -268,8 +317,14 @@ button:disabled {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 0;
+}
+
+.player-page .actions button {
+  flex: 1 1 calc(50% - 5px);
+  min-width: 0;
 }
 
 .script-box,

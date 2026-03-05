@@ -193,9 +193,14 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.actions button:first-child {
-  background: linear-gradient(135deg, #5d7387, #8599ad);
-  box-shadow: 0 10px 20px rgba(68, 89, 108, 0.25);
+#fullscreenBtn {
+  background: linear-gradient(135deg, #8c53ff, #4f46e5);
+  box-shadow: 0 10px 22px rgba(92, 70, 220, 0.28);
+}
+
+#homeBtn {
+  background: linear-gradient(135deg, #4f6377, #68839e);
+  box-shadow: 0 10px 22px rgba(68, 90, 112, 0.25);
 }
 
 .status {
@@ -219,7 +224,7 @@ button:disabled {
 
 .presentation-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 1.95fr) minmax(280px, 0.75fr);
   gap: 14px;
   align-items: start;
 }
@@ -252,7 +257,7 @@ button:disabled {
   margin: 8px 0 4px;
   background: rgba(255, 255, 255, 0.8);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 6px 18px rgba(13, 62, 102, 0.08);
-  max-height: 62vh;
+  max-height: 78vh;
   object-fit: contain;
 }
 
@@ -280,8 +285,25 @@ button:disabled {
 
 .script-box {
   margin-top: 0;
-  max-height: 28vh;
+  max-height: 18vh;
   overflow: auto;
+}
+
+.player-page .app-shell {
+  width: min(1320px, 96vw);
+}
+
+.player-page #deckPanel {
+  padding: 18px;
+}
+
+.player-page .status {
+  margin: 2px 0 10px;
+}
+
+.player-page .script-box {
+  min-height: 61vh;
+  max-height: 61vh;
 }
 
 .qna {
@@ -305,6 +327,33 @@ button:disabled {
 .qna textarea:focus {
   outline: 2px solid rgba(0, 112, 243, 0.22);
   border-color: rgba(0, 112, 243, 0.42);
+}
+
+.media-pane:fullscreen,
+.media-pane:-webkit-full-screen {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.media-pane:fullscreen .slide-image,
+.media-pane:-webkit-full-screen .slide-image {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #000;
+  object-fit: contain;
+}
+
+.media-pane:fullscreen #slideImageHint,
+.media-pane:-webkit-full-screen #slideImageHint {
+  display: none;
 }
 
 @media (max-width: 760px) {

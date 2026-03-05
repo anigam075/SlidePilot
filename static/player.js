@@ -1,7 +1,3 @@
-const uploadForm = document.getElementById("uploadForm");
-const pptFileInput = document.getElementById("pptFile");
-const statusBox = document.getElementById("status");
-
 const deckPanel = document.getElementById("deckPanel");
 const slideTitle = document.getElementById("slideTitle");
 const slideCounter = document.getElementById("slideCounter");
@@ -10,12 +6,17 @@ const slideImageHint = document.getElementById("slideImageHint");
 const scriptBox = document.getElementById("scriptBox");
 const answerBox = document.getElementById("answerBox");
 const qnaSection = document.getElementById("qnaSection");
-const audioPlayer = new Audio();
+const statusBox = document.getElementById("status");
+const mediaPane = document.getElementById("mediaPane");
 
-const prevBtn = document.getElementById("prevBtn");
 const narrateBtn = document.getElementById("narrateBtn");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
+const homeBtn = document.getElementById("homeBtn");
 const askBtn = document.getElementById("askBtn");
 const questionInput = document.getElementById("questionInput");
+const audioPlayer = new Audio();
+
+const deckId = document.body.dataset.deckId;
 
 let deck = null;
 let currentSlideIndex = 0;
@@ -25,7 +26,7 @@ let hasCompletedPresentation = false;
 
 function setStatus(message, isError = false) {
   statusBox.textContent = message;
-  statusBox.style.color = isError ? "#b00020" : "#475569";
+  statusBox.style.color = isError ? "#b00020" : "#2f5976";
 }
 
 function currentSlide() {
@@ -50,11 +51,6 @@ function renderSlide() {
   answerBox.textContent = "";
   questionInput.value = "";
   audioPlayer.src = slide.audio_url || "";
-
-  prevBtn.disabled = currentSlideIndex === 0;
-  if (autoPresentationRunning) {
-    prevBtn.disabled = true;
-  }
 }
 
 function setPresentationButtonIdle() {
@@ -64,7 +60,12 @@ function setPresentationButtonIdle() {
   narrateBtn.textContent = hasCompletedPresentation
     ? "Replay Presentation"
     : "Start Presentation";
-  prevBtn.disabled = currentSlideIndex === 0;
+}
+
+function updateFullscreenButton() {
+  fullscreenBtn.textContent = document.fullscreenElement
+    ? "Exit Fullscreen"
+    : "Enter Fullscreen";
 }
 
 function waitForAudioToEnd() {
@@ -86,41 +87,47 @@ function waitForAudioToEnd() {
   });
 }
 
+async function ensurePreparedDeck() {
+  const needsPrepare =
+    !deck?.closing_audio_url ||
+    deck.slides.some((slide) => !slide.script || !slide.audio_url);
+  if (!needsPrepare) return;
+
+  setStatus("Missing prepared narration. Generating now...");
+  const response = await fetch(`/api/decks/${deck.deck_id}/prepare`, { method: "POST" });
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.detail || "Preparation failed");
+  }
+  const prepared = await response.json();
+  deck.slides = prepared.slides || deck.slides;
+  deck.closing_statement = prepared.closing_statement;
+  deck.closing_audio_url = prepared.closing_audio_url;
+}
+
 async function playCurrentSlideAudioAuto() {
   const slide = currentSlide();
   if (!deck || !slide) return;
   if (!slide.audio_url) {
     throw new Error(`Missing narration audio for slide ${slide.slide_number}.`);
   }
-
-  prevBtn.disabled = true;
   renderSlide();
   setStatus(`Playing slide ${slide.slide_number} narration...`);
   await audioPlayer.play();
   await waitForAudioToEnd();
 }
 
-uploadForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!pptFileInput.files.length) {
-    setStatus("Choose a .pptx file first.", true);
+async function loadDeck() {
+  if (!deckId) {
+    setStatus("Deck id is missing.", true);
     return;
   }
-  const file = pptFileInput.files[0];
-  const formData = new FormData();
-  formData.append("file", file);
-
   try {
-    setStatus("Uploading and parsing deck...");
-    const response = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-    });
+    const response = await fetch(`/api/decks/${encodeURIComponent(deckId)}`);
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(err.detail || "Upload failed");
+      throw new Error(err.detail || "Failed to load deck");
     }
-
     deck = await response.json();
     currentSlideIndex = 0;
     autoPresentationRunning = false;
@@ -131,17 +138,14 @@ uploadForm.addEventListener("submit", async (event) => {
     setPresentationButtonIdle();
     renderSlide();
     if (deck.render_warning) {
-      setStatus(
-        `Loaded ${deck.filename} with ${deck.total_slides} slides. Image rendering warning: ${deck.render_warning}`,
-        true
-      );
+      setStatus(`Loaded deck. Image rendering warning: ${deck.render_warning}`, true);
     } else {
-      setStatus(`Loaded ${deck.filename} with ${deck.total_slides} slides.`);
+      setStatus("Deck ready. Press Start Presentation.");
     }
   } catch (error) {
-    setStatus(error.message || "Upload failed", true);
+    setStatus(error.message || "Unable to load presentation", true);
   }
-});
+}
 
 narrateBtn.addEventListener("click", async () => {
   if (!deck) return;
@@ -173,18 +177,7 @@ narrateBtn.addEventListener("click", async () => {
     narrateBtn.disabled = true;
     qnaSection.classList.add("hidden");
     answerBox.textContent = "";
-    setStatus("Engines on. Prepping all slide narrations for smooth playback...");
-    const prepareResponse = await fetch(`/api/decks/${deck.deck_id}/prepare`, {
-      method: "POST",
-    });
-    if (!prepareResponse.ok) {
-      const err = await prepareResponse.json();
-      throw new Error(err.detail || "Preparation failed");
-    }
-    const prepared = await prepareResponse.json();
-    deck.slides = prepared.slides || deck.slides;
-    deck.closing_statement = prepared.closing_statement;
-    deck.closing_audio_url = prepared.closing_audio_url;
+    await ensurePreparedDeck();
 
     autoPresentationRunning = true;
     hasCompletedPresentation = false;
@@ -221,10 +214,27 @@ narrateBtn.addEventListener("click", async () => {
   }
 });
 
-prevBtn.addEventListener("click", () => {
-  if (!deck || currentSlideIndex === 0) return;
-  currentSlideIndex -= 1;
-  renderSlide();
+fullscreenBtn.addEventListener("click", async () => {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (!slideImage.classList.contains("hidden")) {
+      await mediaPane.requestFullscreen();
+      return;
+    }
+    setStatus("Fullscreen is available only when a slide image is visible.", true);
+  } catch {
+    setStatus("Unable to toggle fullscreen mode.", true);
+  }
+});
+
+document.addEventListener("fullscreenchange", updateFullscreenButton);
+
+homeBtn.addEventListener("click", () => {
+  audioPlayer.pause();
+  window.location.href = "/";
 });
 
 askBtn.addEventListener("click", async () => {
@@ -265,3 +275,6 @@ askBtn.addEventListener("click", async () => {
     askBtn.disabled = false;
   }
 });
+
+updateFullscreenButton();
+loadDeck();

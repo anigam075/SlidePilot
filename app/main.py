@@ -73,6 +73,15 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/player/{deck_id}")
+async def player_page(request: Request, deck_id: str):
+    _load_deck_or_404(deck_id)
+    return templates.TemplateResponse(
+        "player.html",
+        {"request": request, "deck_id": deck_id},
+    )
+
+
 @app.post("/api/upload", response_model=DeckResponse)
 async def upload_ppt(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pptx"):
